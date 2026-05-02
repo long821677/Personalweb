@@ -1,0 +1,2060 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>化学教学辅助工具 - 结构式编辑 | 3D可视化 | AI辅导</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://3Dmol.csb.pitt.edu/build/3Dmol-min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg: #f0fdf4;
+            --card-bg: #ffffff;
+            --primary: #22c55e;
+            --primary-dark: #16a34a;
+            --text: #1f2937;
+            --text-secondary: #6b7280;
+            --border: #dcfce7;
+            --hover: #f0fdf4;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { scroll-behavior: smooth; }
+        body {
+            font-family: 'Noto Sans SC', system-ui, sans-serif;
+            background: linear-gradient(135deg, #f0fdf4 0%, #f4f7f4 50%, #e3ebe3 100%);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+        
+        /* Tab 导航 */
+        .tab-nav {
+            display: flex;
+            background: white;
+            border-radius: 16px;
+            padding: 4px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            gap: 2px;
+        }
+        .tab-btn {
+            flex: 1;
+            padding: 12px 20px;
+            border: none;
+            background: transparent;
+            border-radius: 12px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            color: var(--text-secondary);
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .tab-btn.active {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 2px 8px rgba(34,197,94,0.3);
+        }
+        .tab-btn:hover:not(.active) {
+            background: var(--hover);
+            color: var(--primary-dark);
+        }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+
+        /* 卡片 */
+        .card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.06);
+            border: 1px solid var(--border);
+        }
+        
+        /* 按钮 */
+        .btn {
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-size: 14px;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #22c55e, #16a34a);
+            color: white;
+        }
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(34,197,94,0.3);
+        }
+        .btn-outline {
+            border: 2px solid var(--primary);
+            color: var(--primary-dark);
+            background: white;
+        }
+        .btn-outline:hover { background: var(--hover); }
+        .btn-sm { padding: 6px 14px; font-size: 13px; }
+        .btn-xs { padding: 4px 10px; font-size: 12px; border-radius: 8px; }
+
+        /* 输入框 */
+        input, textarea, select {
+            width: 100%;
+            padding: 10px 14px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            font-size: 14px;
+            transition: all 0.2s;
+            font-family: inherit;
+        }
+        input:focus, textarea:focus, select:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(34,197,94,0.1);
+        }
+
+        /* 结构式编辑器画布 */
+        #molCanvas {
+            border: 2px dashed var(--border);
+            border-radius: 12px;
+            cursor: crosshair;
+            background: #fafafa;
+        }
+        #molCanvas:hover { border-color: var(--primary); }
+
+        /* 3D 查看器 */
+        #viewer3d {
+            width: 100%;
+            height: 450px;
+            border-radius: 12px;
+            border: 2px solid var(--border);
+            position: relative;
+        }
+
+        /* AI 对话 */
+        .chat-container {
+            height: 500px;
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 16px;
+            background: #f9fafb;
+            border-radius: 12px;
+            margin-bottom: 12px;
+        }
+        .chat-msg {
+            margin-bottom: 12px;
+            display: flex;
+            gap: 8px;
+        }
+        .chat-msg.user { flex-direction: row-reverse; }
+        .chat-msg .bubble {
+            max-width: 80%;
+            padding: 12px 16px;
+            border-radius: 16px;
+            font-size: 14px;
+            line-height: 1.5;
+        }
+        .chat-msg.assistant .bubble {
+            background: white;
+            border: 1px solid var(--border);
+        }
+        .chat-msg.user .bubble {
+            background: var(--primary);
+            color: white;
+        }
+        
+        /* 原子/官能团按钮 */
+        .atom-btn {
+            width: 48px;
+            height: 48px;
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            background: white;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 14px;
+            transition: all 0.15s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .atom-btn:hover {
+            border-color: var(--primary);
+            background: var(--hover);
+            transform: translateY(-1px);
+        }
+        .atom-btn.selected {
+            background: var(--primary);
+            color: white;
+            border-color: var(--primary);
+        }
+
+        /* 同分异构体 */
+        .isomer-card {
+            border: 2px solid var(--border);
+            border-radius: 12px;
+            padding: 16px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .isomer-card:hover, .isomer-card.selected {
+            border-color: var(--primary);
+            background: var(--hover);
+        }
+
+        /* 滚动条 */
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+
+        /* 动画 */
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        .fade-in { animation: fadeIn 0.3s ease; }
+        
+        @keyframes slideDown { from { opacity: 0; transform: translateY(-20px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes slideUp { from { opacity: 1; transform: translateY(0); } to { opacity: 0; transform: translateY(-20px); } }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .spinner {
+            width: 20px; height: 20px;
+            border: 3px solid var(--border);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.6s linear infinite;
+        }
+
+        /* Toast */
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+        .toast {
+            background: white;
+            border-radius: 12px;
+            padding: 14px 20px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.12);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 14px;
+            font-weight: 500;
+            animation: slideDown 0.3s ease;
+            max-width: 380px;
+            border-left: 4px solid var(--primary);
+        }
+        .toast.toast-error { border-left-color: #ef4444; }
+        .toast.toast-warn { border-left-color: #f59e0b; }
+        .toast.removing { animation: slideUp 0.3s ease forwards; }
+        
+        /* 工具提示 */
+        .tooltip {
+            position: relative;
+        }
+        .tooltip::after {
+            content: attr(data-tip);
+            position: absolute;
+            bottom: calc(100% + 6px);
+            left: 50%;
+            transform: translateX(-50%);
+            background: #1f2937;
+            color: white;
+            padding: 4px 10px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.15s;
+        }
+        .tooltip:hover::after { opacity: 1; }
+
+        @media (max-width: 768px) {
+            .tab-nav { flex-wrap: wrap; }
+            .tab-btn { flex: 1 1 auto; font-size: 12px; padding: 8px 10px; }
+        }
+    </style>
+</head>
+<body>
+    <!-- Toast 容器 -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <!-- 头部 -->
+    <header class="bg-white border-b border-green-100 sticky top-0 z-40">
+        <div class="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+            <a href="index.html" class="flex items-center space-x-2">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-green-500 to-emerald-600 flex items-center justify-center text-white font-bold">化</div>
+                <span class="text-xl font-bold text-gray-800">化学教学工具</span>
+            </a>
+            <a href="index.html" class="text-green-600 hover:text-green-700 font-medium">← 返回主页</a>
+        </div>
+    </header>
+
+    <!-- 主体 -->
+    <div class="max-w-7xl mx-auto px-4 py-6">
+        <!-- Tab 导航 -->
+        <div class="tab-nav mb-6" role="tablist">
+            <button class="tab-btn active" onclick="switchTab('editor')" role="tab">✏️ 结构式编辑</button>
+            <button class="tab-btn" onclick="switchTab('viewer3d')" role="tab">🔮 3D可视化</button>
+            <button class="tab-btn" onclick="switchTab('isomer')" role="tab">🔬 同分异构体</button>
+            <button class="tab-btn" onclick="switchTab('ai')" role="tab">🤖 AI辅导</button>
+            <button class="tab-btn" onclick="switchTab('learn')" role="tab">📖 学习辅助</button>
+        </div>
+
+        <!-- Tab 1: 结构式编辑器 -->
+        <div id="tab-editor" class="tab-content active fade-in">
+            <div class="grid lg:grid-cols-12 gap-6">
+                <!-- 左侧工具栏 -->
+                <div class="lg:col-span-2 card">
+                    <h3 class="font-semibold text-gray-700 mb-3">原子</h3>
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        <button class="atom-btn selected" data-atom="C" onclick="selectAtom('C', this)">C</button>
+                        <button class="atom-btn" data-atom="H" onclick="selectAtom('H', this)">H</button>
+                        <button class="atom-btn" data-atom="O" onclick="selectAtom('O', this)">O</button>
+                        <button class="atom-btn" data-atom="N" onclick="selectAtom('N', this)">N</button>
+                        <button class="atom-btn" data-atom="S" onclick="selectAtom('S', this)">S</button>
+                        <button class="atom-btn" data-atom="P" onclick="selectAtom('P', this)">P</button>
+                        <button class="atom-btn" data-atom="Cl" onclick="selectAtom('Cl', this)">Cl</button>
+                        <button class="atom-btn" data-atom="Br" onclick="selectAtom('Br', this)">Br</button>
+                    </div>
+
+                    <h3 class="font-semibold text-gray-700 mb-3">键</h3>
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        <button class="atom-btn" data-bond="single" onclick="selectBond('single', this)">━</button>
+                        <button class="atom-btn" data-bond="double" onclick="selectBond('double', this)">═</button>
+                        <button class="atom-btn" data-bond="triple" onclick="selectBond('triple', this)">≡</button>
+                    </div>
+
+                    <h3 class="font-semibold text-gray-700 mb-3">官能团</h3>
+                    <div class="flex flex-wrap gap-2 mb-4">
+                        <button class="btn btn-outline btn-xs" onclick="addPreset('OH')">-OH</button>
+                        <button class="btn btn-outline btn-xs" onclick="addPreset('COOH')">-COOH</button>
+                        <button class="btn btn-outline btn-xs" onclick="addPreset('NH2')">-NH₂</button>
+                        <button class="btn btn-outline btn-xs" onclick="addPreset('CHO')">-CHO</button>
+                        <button class="btn btn-outline btn-xs" onclick="addPreset('NO2')">-NO₂</button>
+                    </div>
+
+                    <h3 class="font-semibold text-gray-700 mb-3">模板</h3>
+                    <div class="flex flex-wrap gap-2">
+                        <button class="btn btn-outline btn-xs" onclick="loadPreset('benzene')">苯环</button>
+                        <button class="btn btn-outline btn-xs" onclick="loadPreset('cyclohexane')">环己烷</button>
+                        <button class="btn btn-outline btn-xs" onclick="loadPreset('ethanol')">乙醇</button>
+                        <button class="btn btn-outline btn-xs" onclick="loadPreset('acetic')">乙酸</button>
+                    </div>
+                </div>
+
+                <!-- 中间画布 -->
+                <div class="lg:col-span-7 card">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-semibold text-gray-700">结构式画布</h3>
+                        <div class="flex gap-2">
+                            <button class="btn btn-outline btn-sm" onclick="undoDraw()">↩ 撤销</button>
+                            <button class="btn btn-outline btn-sm" onclick="clearCanvas()">🗑 清空</button>
+                            <button class="btn btn-primary btn-sm" onclick="exportStructure()">📋 复制</button>
+                            <button class="btn btn-primary btn-sm" onclick="convertTo3D()">🔮 转3D</button>
+                        </div>
+                    </div>
+                    <canvas id="molCanvas" width="700" height="400"></canvas>
+                    <p class="text-xs text-gray-400 mt-2">
+                        💡 提示：点击画布放置原子 | 从原子拖拽到另一原子创建键 | 双击键更改类型
+                    </p>
+                </div>
+
+                <!-- 右侧信息 -->
+                <div class="lg:col-span-3 card">
+                    <h3 class="font-semibold text-gray-700 mb-3">结构信息</h3>
+                    <div id="structureInfo" class="text-sm text-gray-500 space-y-2">
+                        <p>分子式：<span id="formulaDisplay">-</span></p>
+                        <p>分子量：<span id="mwDisplay">-</span></p>
+                        <p>原子数：<span id="atomCountDisplay">0</span></p>
+                        <p>化学键：<span id="bondCountDisplay">0</span></p>
+                    </div>
+                    <hr class="my-4 border-gray-100">
+                    <h3 class="font-semibold text-gray-700 mb-3">已绘制结构</h3>
+                    <div id="structureHistory" class="space-y-2 max-h-40 overflow-y-auto"></div>
+                    <div class="mt-4 space-y-2">
+                        <input type="text" id="smilesInput" placeholder="输入SMILES字符串..." class="text-sm">
+                        <button class="btn btn-primary btn-sm w-full" onclick="loadSMILES()">加载SMILES</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 2: 3D 可视化 -->
+        <div id="tab-viewer3d" class="tab-content fade-in">
+            <div class="grid lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-3 card">
+                    <h3 class="font-semibold text-gray-700 mb-3">3D 模型库</h3>
+                    <div class="space-y-2">
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('ethanol')">乙醇 C₂H₅OH</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('benzene')">苯 C₆H₆</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('aspirin')">阿司匹林</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('caffeine')">咖啡因</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('glucose')">葡萄糖</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('aceticAcid')">乙酸</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('acetone')">丙酮</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('toluene')">甲苯</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('phenol')">苯酚</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="loadMolecule3D('glycine')">甘氨酸</button>
+                    </div>
+                    <hr class="my-4 border-gray-100">
+                    <h3 class="font-semibold text-gray-700 mb-3">显示模式</h3>
+                    <div class="space-y-2">
+                        <button class="btn btn-outline btn-sm w-full" onclick="setStyle3D('stick')">球棍模型</button>
+                        <button class="btn btn-outline btn-sm w-full" onclick="setStyle3D('sphere')">比例模型</button>
+                        <button class="btn btn-outline btn-sm w-full" onclick="setStyle3D('cartoon')">线状模型</button>
+                    </div>
+                    <hr class="my-4 border-gray-100">
+                    <h3 class="font-semibold text-gray-700 mb-3">自定义输入</h3>
+                    <input type="text" id="customMolInput" placeholder="输入分子式或名称..." class="text-sm mb-2">
+                    <button class="btn btn-primary btn-sm w-full" onclick="loadCustomMolecule()">加载模型</button>
+                </div>
+                <div class="lg:col-span-9 card">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="font-semibold text-gray-700">3D 结构查看器</h3>
+                        <span id="currentMolName" class="text-sm text-gray-400">选择分子模型</span>
+                    </div>
+                    <div id="viewer3d"></div>
+                    <p class="text-xs text-gray-400 mt-2">
+                        💡 鼠标左键旋转 | 滚轮缩放 | 右键平移 | 双击重置视角
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 3: 同分异构体 -->
+        <div id="tab-isomer" class="tab-content fade-in">
+            <div class="grid lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-4 card">
+                    <h3 class="font-semibold text-gray-700 mb-3">碳骨架选择</h3>
+                    <div class="space-y-2">
+                        <button class="isomer-card w-full text-left" onclick="analyzeIsomer('C5H12')">
+                            <span class="font-medium">C₅H₁₂</span> <span class="text-gray-400">戊烷</span>
+                            <p class="text-xs text-gray-400 mt-1">3种同分异构体</p>
+                        </button>
+                        <button class="isomer-card w-full text-left" onclick="analyzeIsomer('C4H10')">
+                            <span class="font-medium">C₄H₁₀</span> <span class="text-gray-400">丁烷</span>
+                            <p class="text-xs text-gray-400 mt-1">2种同分异构体</p>
+                        </button>
+                        <button class="isomer-card w-full text-left" onclick="analyzeIsomer('C6H14')">
+                            <span class="font-medium">C₆H₁₄</span> <span class="text-gray-400">己烷</span>
+                            <p class="text-xs text-gray-400 mt-1">5种同分异构体</p>
+                        </button>
+                        <button class="isomer-card w-full text-left" onclick="analyzeIsomer('C4H8')">
+                            <span class="font-medium">C₄H₈</span> <span class="text-gray-400">丁烯</span>
+                            <p class="text-xs text-gray-400 mt-1">4种同分异构体</p>
+                        </button>
+                    </div>
+                </div>
+                <div class="lg:col-span-8 card">
+                    <h3 class="font-semibold text-gray-700 mb-3" id="isomerTitle">同分异构体分析 - 请选择分子</h3>
+                    <div id="isomerContent" class="text-gray-400 text-center py-20">
+                        <svg class="w-16 h-16 mx-auto mb-4 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"></path>
+                        </svg>
+                        <p>请从左侧选择分子式进行分析</p>
+                    </div>
+                    <!-- 对比区域 -->
+                    <div id="isomerComparison" class="hidden mt-6">
+                        <h4 class="font-semibold text-gray-700 mb-3">性质对比</h4>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm" id="isomerTable">
+                                <thead>
+                                    <tr class="bg-gray-50">
+                                        <th class="p-3 text-left">异构体</th>
+                                        <th class="p-3 text-left">沸点 (°C)</th>
+                                        <th class="p-3 text-left">熔点 (°C)</th>
+                                        <th class="p-3 text-left">密度 (g/cm³)</th>
+                                        <th class="p-3 text-left">辛烷值</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="isomerTableBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 4: AI 辅导 -->
+        <div id="tab-ai" class="tab-content fade-in">
+            <div class="grid lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-3 card">
+                    <h3 class="font-semibold text-gray-700 mb-3">快速提问</h3>
+                    <div class="space-y-2">
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="askQuick('氧化还原反应')">什么是氧化还原反应？</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="askQuick('勒夏特列原理')">解释勒夏特列原理</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="askQuick('化学平衡')">化学平衡的移动</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="askQuick('有机反应类型')">有机反应类型总结</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="askQuick('物质的量计算')">物质的量计算方法</button>
+                    </div>
+                    <hr class="my-4 border-gray-100">
+                    <h3 class="font-semibold text-gray-700 mb-3">主题分类</h3>
+                    <div class="space-y-2">
+                        <button class="btn btn-outline btn-sm w-full" onclick="askQuick('无机化学')">无机化学</button>
+                        <button class="btn btn-outline btn-sm w-full" onclick="askQuick('有机化学')">有机化学</button>
+                        <button class="btn btn-outline btn-sm w-full" onclick="askQuick('物理化学')">物理化学</button>
+                        <button class="btn btn-outline btn-sm w-full" onclick="askQuick('化学实验')">化学实验</button>
+                    </div>
+                </div>
+                <div class="lg:col-span-9 card">
+                    <div class="chat-container">
+                        <div class="chat-messages" id="chatMessages">
+                            <div class="chat-msg assistant">
+                                <div class="bubble">
+                                    👋 你好！我是化学AI辅导助手，我可以帮你：
+                                    <br>• 解释化学概念和理论
+                                    <br>• 分析分子结构和性质
+                                    <br>• 解答化学问题和计算
+                                    <br>• 提供解题思路和方法
+                                    <br><br>请直接提问，或从左侧选择常见问题！
+                                </div>
+                            </div>
+                        </div>
+                        <div class="flex gap-2">
+                            <textarea id="aiInput" rows="2" placeholder="输入你的化学问题..." class="flex-1" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendMessage();}"></textarea>
+                            <button class="btn btn-primary" onclick="sendMessage()" style="height:fit-content;">发送</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Tab 5: 学习辅助 -->
+        <div id="tab-learn" class="tab-content fade-in">
+            <div class="grid lg:grid-cols-12 gap-6">
+                <!-- 子导航 -->
+                <div class="lg:col-span-3 card">
+                    <h3 class="font-semibold text-gray-700 mb-3">学习模块</h3>
+                    <div class="space-y-2">
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="switchLearnModule('crystal')">💎 晶体结构</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="switchLearnModule('electrochem')">⚡ 电化学</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="switchLearnModule('formula')">📝 常用公式</button>
+                        <button class="btn btn-outline btn-sm w-full text-left" onclick="switchLearnModule('reaction')">🧪 常见反应</button>
+                    </div>
+                </div>
+                <div class="lg:col-span-9">
+                    <!-- 晶体结构 -->
+                    <div id="learn-crystal" class="learn-module card">
+                        <h3 class="font-semibold text-gray-700 mb-4">晶体结构模型</h3>
+                        <div class="flex flex-wrap gap-3 mb-4">
+                            <button class="btn btn-outline btn-sm" onclick="drawCrystal('NaCl')">NaCl 晶胞</button>
+                            <button class="btn btn-outline btn-sm" onclick="drawCrystal('CsCl')">CsCl 晶胞</button>
+                            <button class="btn btn-outline btn-sm" onclick="drawCrystal('diamond')">金刚石</button>
+                            <button class="btn btn-outline btn-sm" onclick="drawCrystal('graphite')">石墨</button>
+                            <button class="btn btn-outline btn-sm" onclick="drawCrystal('CO2')">CO₂ 分子晶体</button>
+                        </div>
+                        <canvas id="crystalCanvas" width="600" height="400" class="w-full border border-gray-100 rounded-xl bg-gray-50"></canvas>
+                        <div id="crystalInfo" class="mt-3 text-sm text-gray-500 text-center">点击上方按钮查看晶体结构</div>
+                    </div>
+                    <!-- 电化学 -->
+                    <div id="learn-electrochem" class="learn-module card" style="display:none;">
+                        <h3 class="font-semibold text-gray-700 mb-4">电化学可视化</h3>
+                        <div class="flex flex-wrap gap-3 mb-4">
+                            <button class="btn btn-outline btn-sm" onclick="drawElectrochem('galvanic')">Zn-Cu 原电池</button>
+                            <button class="btn btn-outline btn-sm" onclick="drawElectrochem('electrolytic')">电解池</button>
+                            <button class="btn btn-outline btn-sm" onclick="drawElectrochem('corrosion')">铁的腐蚀</button>
+                        </div>
+                        <canvas id="electroCanvas" width="600" height="380" class="w-full border border-gray-100 rounded-xl bg-gray-50"></canvas>
+                        <div id="electroInfo" class="mt-3 text-sm text-gray-500 text-center">点击上方按钮查看电化学装置</div>
+                    </div>
+                    <!-- 常用公式 -->
+                    <div id="learn-formula" class="learn-module card" style="display:none;">
+                        <h3 class="font-semibold text-gray-700 mb-4">化学常用公式速查</h3>
+                        <div class="grid md:grid-cols-2 gap-4">
+                            <div class="p-4 bg-green-50 rounded-xl border border-green-100">
+                                <h4 class="font-semibold text-green-800">物质的量</h4>
+                                <p class="text-sm text-gray-600 mt-1">n = m/M = V/Vm = N/NA</p>
+                                <p class="text-sm text-gray-600">c = n/V | c₁V₁ = c₂V₂</p>
+                            </div>
+                            <div class="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                                <h4 class="font-semibold text-blue-800">热化学</h4>
+                                <p class="text-sm text-gray-600 mt-1">ΔH = ΣE(断键) - ΣE(成键)</p>
+                                <p class="text-sm text-gray-600">盖斯定律：ΔH = ΔH₁ + ΔH₂ + ...</p>
+                            </div>
+                            <div class="p-4 bg-orange-50 rounded-xl border border-orange-100">
+                                <h4 class="font-semibold text-orange-800">化学平衡</h4>
+                                <p class="text-sm text-gray-600 mt-1">K = [C]ᶜ[D]ᵈ / [A]ᵃ[B]ᵇ</p>
+                                <p class="text-sm text-gray-600">转化率 = Δn/n₀ × 100%</p>
+                            </div>
+                            <div class="p-4 bg-purple-50 rounded-xl border border-purple-100">
+                                <h4 class="font-semibold text-purple-800">pH 计算</h4>
+                                <p class="text-sm text-gray-600 mt-1">pH = -lg[H⁺]</p>
+                                <p class="text-sm text-gray-600">pH + pOH = 14 (25°C)</p>
+                            </div>
+                            <div class="p-4 bg-red-50 rounded-xl border border-red-100">
+                                <h4 class="font-semibold text-red-800">电化学</h4>
+                                <p class="text-sm text-gray-600 mt-1">Q = It = n(e⁻)F</p>
+                                <p class="text-sm text-gray-600">F = 96,500 C/mol</p>
+                            </div>
+                            <div class="p-4 bg-teal-50 rounded-xl border border-teal-100">
+                                <h4 class="font-semibold text-teal-800">气体定律</h4>
+                                <p class="text-sm text-gray-600 mt-1">PV = nRT</p>
+                                <p class="text-sm text-gray-600">M = ρRT/P (理想气体)</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 常见反应 -->
+                    <div id="learn-reaction" class="learn-module card" style="display:none;">
+                        <h3 class="font-semibold text-gray-700 mb-4">高中化学常见反应方程式</h3>
+                        <div class="space-y-3">
+                            <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <span class="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">氧化还原</span>
+                                <p class="text-sm mt-2 font-mono">2Na + 2H₂O → 2NaOH + H₂↑</p>
+                                <p class="text-xs text-gray-400">钠与水反应</p>
+                            </div>
+                            <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <span class="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">置换</span>
+                                <p class="text-sm mt-2 font-mono">Fe + CuSO₄ → FeSO₄ + Cu</p>
+                                <p class="text-xs text-gray-400">铁置换铜</p>
+                            </div>
+                            <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <span class="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">复分解</span>
+                                <p class="text-sm mt-2 font-mono">HCl + NaOH → NaCl + H₂O</p>
+                                <p class="text-xs text-gray-400">酸碱中和反应</p>
+                            </div>
+                            <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <span class="text-xs px-2 py-0.5 bg-purple-100 text-purple-700 rounded-full">有机</span>
+                                <p class="text-sm mt-2 font-mono">CH₃COOH + C₂H₅OH ⇌ CH₃COOC₂H₅ + H₂O</p>
+                                <p class="text-xs text-gray-400">酯化反应（乙酸乙酯制备）</p>
+                            </div>
+                            <div class="p-3 bg-gray-50 rounded-xl border border-gray-100">
+                                <span class="text-xs px-2 py-0.5 bg-red-100 text-red-700 rounded-full">热分解</span>
+                                <p class="text-sm mt-2 font-mono">2NaHCO₃ → Na₂CO₃ + H₂O + CO₂↑</p>
+                                <p class="text-xs text-gray-400">碳酸氢钠受热分解</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============ Toast 通知系统 ============
+        function showToast(message, type = 'info') {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            const icons = { info: '✅', error: '❌', warn: '⚠️' };
+            toast.className = `toast ${type === 'error' ? 'toast-error' : type === 'warn' ? 'toast-warn' : ''}`;
+            toast.innerHTML = `<span>${icons[type] || icons.info}</span> ${message}`;
+            container.appendChild(toast);
+            setTimeout(() => {
+                toast.classList.add('removing');
+                setTimeout(() => toast.remove(), 300);
+            }, 2500);
+        }
+
+        // ============ Tab 切换 ============
+        function switchTab(name) {
+            document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            document.querySelector(`.tab-btn[onclick*="${name}"]`).classList.add('active');
+            document.getElementById(`tab-${name}`).classList.add('active');
+            if (name === 'viewer3d') setTimeout(() => init3DViewer('ethanol'), 200);
+        }
+
+        // ============ 结构式编辑器 ============
+        const canvas = document.getElementById('molCanvas');
+        const ctx = canvas.getContext('2d');
+        let atoms = []; // {x, y, element, bonds:[]}
+        let currentAtom = 'C';
+        let currentBond = 'single';
+        let dragging = null;
+        let connecting = null;
+        let history = [];
+        let lineStart = null;
+
+        function resizeCanvas() {
+            const rect = canvas.parentElement.getBoundingClientRect();
+            canvas.width = Math.min(rect.width - 48, 700);
+            canvas.height = 400;
+            redraw();
+        }
+        window.addEventListener('resize', resizeCanvas);
+        setTimeout(resizeCanvas, 100);
+
+        function redraw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.fillStyle = '#fafafa';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // 画键
+            atoms.forEach((a, i) => {
+                a.bonds.forEach(b => {
+                    if (b.to > i) {
+                        const toAtom = atoms[b.to];
+                        drawBond(a, toAtom, b.type);
+                    }
+                });
+            });
+            
+            // 画原子
+            atoms.forEach(a => {
+                ctx.beginPath();
+                ctx.arc(a.x, a.y, 18, 0, Math.PI * 2);
+                ctx.fillStyle = getAtomColor(a.element);
+                ctx.fill();
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = a.element === 'C' ? '#fff' : (['O','N','S'].includes(a.element) ? '#fff' : '#333');
+                ctx.font = 'bold 14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.fillText(a.element, a.x, a.y);
+            });
+
+            updateInfo();
+        }
+
+        function drawBond(a1, a2, type) {
+            const dx = a2.x - a1.x;
+            const dy = a2.y - a1.y;
+            const d = Math.sqrt(dx*dx + dy*dy);
+            const nx = -dy / d * 18;
+            const ny = dx / d * 18;
+
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 3;
+            
+            if (type === 'single') {
+                ctx.beginPath();
+                ctx.moveTo(a1.x + nx * 0.6, a1.y + ny * 0.6);
+                ctx.lineTo(a2.x + nx * 0.6, a2.y + ny * 0.6);
+                ctx.stroke();
+            } else if (type === 'double') {
+                for (let s = -1; s <= 1; s += 2) {
+                    ctx.beginPath();
+                    ctx.moveTo(a1.x + nx * 0.6 + dx/d * 4 * s, a1.y + ny * 0.6 + dy/d * 4 * s);
+                    ctx.lineTo(a2.x + nx * 0.6 - dx/d * 4 * s, a2.y + ny * 0.6 - dy/d * 4 * s);
+                    ctx.stroke();
+                }
+            } else if (type === 'triple') {
+                for (let s = -1; s <= 1; s++) {
+                    ctx.beginPath();
+                    ctx.moveTo(a1.x + nx * 0.6 + dx/d * 5 * s, a1.y + ny * 0.6 + dy/d * 5 * s);
+                    ctx.lineTo(a2.x + nx * 0.6 - dx/d * 5 * s, a2.y + ny * 0.6 - dy/d * 5 * s);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function getAtomColor(el) {
+            const colors = { C: '#4a5568', H: '#a0aec0', O: '#e53e3e', N: '#3182ce', S: '#d69e2e', P: '#ed8936', Cl: '#38a169', Br: '#805ad5' };
+            return colors[el] || '#718096';
+        }
+
+        canvas.addEventListener('mousedown', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+            
+            const hitAtom = findAtomAt(x, y);
+            if (hitAtom !== null) {
+                if (e.shiftKey) {
+                    connecting = { from: hitAtom, sx: x, sy: y };
+                    saveHistory();
+                } else {
+                    dragging = { index: hitAtom, sx: x, sy: y };
+                    saveHistory();
+                }
+            } else {
+                lineStart = { x, y };
+                saveHistory();
+            }
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const x = e.clientX - rect.left;
+            const y = e.clientY - rect.top;
+
+            if (dragging !== null) {
+                atoms[dragging.index].x = x;
+                atoms[dragging.index].y = y;
+                redraw();
+            }
+            
+            if (connecting !== null) {
+                const hitAtom = findAtomAt(x, y);
+                if (hitAtom !== null && hitAtom !== connecting.from) {
+                    const existing = atoms[connecting.from].bonds.find(b => b.to === hitAtom);
+                    if (!existing) {
+                        atoms[connecting.from].bonds.push({ to: hitAtom, type: currentBond });
+                        atoms[hitAtom].bonds.push({ to: connecting.from, type: currentBond });
+                    } else {
+                        const types = ['single', 'double', 'triple'];
+                        const idx = types.indexOf(existing.type);
+                        existing.type = types[(idx + 1) % 3];
+                        const rev = atoms[hitAtom].bonds.find(b => b.to === connecting.from);
+                        if (rev) rev.type = existing.type;
+                    }
+                    connecting = null;
+                    redraw();
+                }
+            }
+        });
+
+        canvas.addEventListener('mouseup', (e) => {
+            if (lineStart && dragging === null && connecting === null) {
+                const rect = canvas.getBoundingClientRect();
+                const x = e.clientX - rect.left;
+                const y = e.clientY - rect.top;
+                const dist = Math.sqrt((x - lineStart.x) ** 2 + (y - lineStart.y) ** 2);
+                
+                if (dist < 5) {
+                    atoms.push({ x, y, element: currentAtom, bonds: [] });
+                } else {
+                    const fromIdx = atoms.push({ x: lineStart.x, y: lineStart.y, element: currentAtom, bonds: [] }) - 1;
+                    const toIdx = atoms.push({ x, y, element: currentAtom, bonds: [] }) - 1;
+                    atoms[fromIdx].bonds.push({ to: toIdx, type: currentBond });
+                    atoms[toIdx].bonds.push({ to: fromIdx, type: currentBond });
+                }
+                redraw();
+            }
+            dragging = null;
+            connecting = null;
+            lineStart = null;
+        });
+
+        function findAtomAt(x, y) {
+            for (let i = atoms.length - 1; i >= 0; i--) {
+                const dx = x - atoms[i].x;
+                const dy = y - atoms[i].y;
+                if (dx * dx + dy * dy < 400) return i;
+            }
+            return null;
+        }
+
+        function selectAtom(element, btn) {
+            currentAtom = element;
+            document.querySelectorAll('.atom-btn[data-atom]').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        }
+
+        function selectBond(type, btn) {
+            currentBond = type;
+            document.querySelectorAll('.atom-btn[data-bond]').forEach(b => b.classList.remove('selected'));
+            btn.classList.add('selected');
+        }
+
+        function addPreset(group) {
+            saveHistory();
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            const baseIdx = atoms.length;
+            if (group === 'OH') {
+                const cIdx = baseIdx;
+                atoms.push({ x: cx, y: cy, element: 'C', bonds: [] });
+                atoms.push({ x: cx + 40, y: cy, element: 'O', bonds: [{ to: cIdx, type: 'single' }] });
+                atoms[cIdx].bonds.push({ to: cIdx + 1, type: 'single' });
+                atoms.push({ x: cx + 70, y: cy - 15, element: 'H', bonds: [{ to: cIdx + 1, type: 'single' }] });
+                atoms[cIdx + 1].bonds.push({ to: cIdx + 2, type: 'single' });
+            } else if (group === 'COOH') {
+                const cIdx = baseIdx;
+                atoms.push({ x: cx, y: cy, element: 'C', bonds: [] });
+                atoms.push({ x: cx + 35, y: cy, element: 'C', bonds: [{ to: cIdx, type: 'single' }] });
+                atoms[cIdx].bonds.push({ to: cIdx + 1, type: 'single' });
+                atoms.push({ x: cx + 60, y: cy - 20, element: 'O', bonds: [{ to: cIdx + 1, type: 'double' }] });
+                atoms[cIdx + 1].bonds.push({ to: cIdx + 2, type: 'double' });
+                atoms.push({ x: cx + 60, y: cy + 20, element: 'O', bonds: [{ to: cIdx + 1, type: 'single' }] });
+                atoms[cIdx + 1].bonds.push({ to: cIdx + 3, type: 'single' });
+                atoms.push({ x: cx + 85, y: cy + 30, element: 'H', bonds: [{ to: cIdx + 3, type: 'single' }] });
+                atoms[cIdx + 3].bonds.push({ to: cIdx + 4, type: 'single' });
+            } else if (group === 'NH2') {
+                const cIdx = baseIdx;
+                atoms.push({ x: cx, y: cy, element: 'C', bonds: [] });
+                atoms.push({ x: cx + 40, y: cy, element: 'N', bonds: [{ to: cIdx, type: 'single' }] });
+                atoms[cIdx].bonds.push({ to: cIdx + 1, type: 'single' });
+                atoms.push({ x: cx + 70, y: cy - 15, element: 'H', bonds: [{ to: cIdx + 1, type: 'single' }] });
+                atoms[cIdx + 1].bonds.push({ to: cIdx + 2, type: 'single' });
+                atoms.push({ x: cx + 70, y: cy + 15, element: 'H', bonds: [{ to: cIdx + 1, type: 'single' }] });
+                atoms[cIdx + 1].bonds.push({ to: cIdx + 3, type: 'single' });
+            } else if (group === 'CHO') {
+                const cIdx = baseIdx;
+                atoms.push({ x: cx, y: cy, element: 'C', bonds: [] });
+                atoms.push({ x: cx + 35, y: cy, element: 'C', bonds: [{ to: cIdx, type: 'single' }] });
+                atoms[cIdx].bonds.push({ to: cIdx + 1, type: 'single' });
+                atoms.push({ x: cx + 60, y: cy - 15, element: 'O', bonds: [{ to: cIdx + 1, type: 'double' }] });
+                atoms[cIdx + 1].bonds.push({ to: cIdx + 2, type: 'double' });
+                atoms.push({ x: cx + 60, y: cy + 20, element: 'H', bonds: [{ to: cIdx + 1, type: 'single' }] });
+                atoms[cIdx + 1].bonds.push({ to: cIdx + 3, type: 'single' });
+            } else if (group === 'NO2') {
+                const cIdx = baseIdx;
+                atoms.push({ x: cx, y: cy, element: 'C', bonds: [] });
+                atoms.push({ x: cx + 35, y: cy, element: 'N', bonds: [{ to: cIdx, type: 'single' }] });
+                atoms[cIdx].bonds.push({ to: cIdx + 1, type: 'single' });
+                atoms.push({ x: cx + 60, y: cy - 20, element: 'O', bonds: [{ to: cIdx + 1, type: 'double' }] });
+                atoms[cIdx + 1].bonds.push({ to: cIdx + 2, type: 'double' });
+                atoms.push({ x: cx + 60, y: cy + 20, element: 'O', bonds: [{ to: cIdx + 1, type: 'single' }] });
+                atoms[cIdx + 1].bonds.push({ to: cIdx + 3, type: 'single' });
+            }
+            redraw();
+        }
+
+        function loadPreset(type) {
+            saveHistory();
+            atoms = [];
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            if (type === 'benzene') {
+                const r = 60;
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI * 2 / 6) * i - Math.PI / 2;
+                    atoms.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), element: 'C', bonds: [] });
+                }
+                for (let i = 0; i < 6; i++) {
+                    const bondType = (i % 2 === 0) ? 'double' : 'single';
+                    atoms[i].bonds.push({ to: (i + 1) % 6, type: bondType });
+                }
+            } else if (type === 'cyclohexane') {
+                const r = 60;
+                for (let i = 0; i < 6; i++) {
+                    const angle = (Math.PI * 2 / 6) * i - Math.PI / 2;
+                    atoms.push({ x: cx + r * Math.cos(angle), y: cy + r * Math.sin(angle), element: 'C', bonds: [] });
+                }
+                for (let i = 0; i < 6; i++) {
+                    atoms[i].bonds.push({ to: (i + 1) % 6, type: 'single' });
+                }
+            } else if (type === 'ethanol') {
+                atoms.push({ x: cx - 50, y: cy, element: 'C', bonds: [] });
+                atoms.push({ x: cx, y: cy, element: 'C', bonds: [{ to: 0, type: 'single' }] });
+                atoms[0].bonds.push({ to: 1, type: 'single' });
+                atoms.push({ x: cx + 40, y: cy, element: 'O', bonds: [{ to: 1, type: 'single' }] });
+                atoms[1].bonds.push({ to: 2, type: 'single' });
+                atoms.push({ x: cx + 70, y: cy - 15, element: 'H', bonds: [{ to: 2, type: 'single' }] });
+                atoms[2].bonds.push({ to: 3, type: 'single' });
+            } else if (type === 'acetic') {
+                atoms.push({ x: cx - 40, y: cy, element: 'C', bonds: [] });
+                atoms.push({ x: cx, y: cy, element: 'C', bonds: [{ to: 0, type: 'single' }] });
+                atoms[0].bonds.push({ to: 1, type: 'single' });
+                atoms.push({ x: cx + 30, y: cy - 20, element: 'O', bonds: [{ to: 1, type: 'double' }] });
+                atoms[1].bonds.push({ to: 2, type: 'double' });
+                atoms.push({ x: cx + 30, y: cy + 20, element: 'O', bonds: [{ to: 1, type: 'single' }] });
+                atoms[1].bonds.push({ to: 3, type: 'single' });
+                atoms.push({ x: cx + 60, y: cy + 30, element: 'H', bonds: [{ to: 3, type: 'single' }] });
+                atoms[3].bonds.push({ to: 4, type: 'single' });
+            }
+            redraw();
+        }
+
+        function saveHistory() {
+            history.push(JSON.parse(JSON.stringify(atoms)));
+            if (history.length > 20) history.shift();
+        }
+
+        function undoDraw() {
+            if (history.length > 0) {
+                atoms = history.pop();
+                redraw();
+            }
+        }
+
+        function clearCanvas() {
+            saveHistory();
+            atoms = [];
+            redraw();
+        }
+
+        function updateInfo() {
+            const counts = {};
+            atoms.forEach(a => { counts[a.element] = (counts[a.element] || 0) + 1; });
+            let formula = '';
+            const elWeights = { C: 12.01, H: 1.008, O: 16.00, N: 14.01, S: 32.07, P: 30.97, Cl: 35.45, Br: 79.90 };
+            let mw = 0;
+            
+            ['C','H','O','N','S','P','Cl','Br'].forEach(el => {
+                if (counts[el]) {
+                    formula += el + (counts[el] > 1 ? `<sub>${counts[el]}</sub>` : '');
+                    mw += (elWeights[el] || 0) * counts[el];
+                }
+            });
+            
+            document.getElementById('formulaDisplay').innerHTML = formula || '-';
+            document.getElementById('mwDisplay').textContent = mw ? mw.toFixed(2) + ' g/mol' : '-';
+            document.getElementById('atomCountDisplay').textContent = atoms.length;
+            let bondCount = 0;
+            atoms.forEach(a => bondCount += a.bonds.length);
+            document.getElementById('bondCountDisplay').textContent = Math.floor(bondCount / 2);
+        }
+
+        function exportStructure() {
+            const data = { atoms: atoms.map(a => ({ x: Math.round(a.x), y: Math.round(a.y), element: a.element, bonds: a.bonds })) };
+            navigator.clipboard.writeText(JSON.stringify(data)).then(() => showToast('结构数据已复制到剪贴板'));
+        }
+
+        function convertTo3D() {
+            if (atoms.length === 0) { showToast('请先绘制结构式', 'warn'); return; }
+            const counts = {};
+            atoms.forEach(a => { counts[a.element] = (counts[a.element] || 0) + 1; });
+            let formula = '';
+            ['C','H','O','N','S','P','Cl','Br'].forEach(el => {
+                if (counts[el]) formula += el + counts[el];
+            });
+
+            const formulaToSMILES = {
+                'C1O1': 'CO', 'C1O2': 'O=C=O', 'C2O1': 'CCO',
+                'C2H6O1': 'CCO', 'C2H4O2': 'CC(=O)O',
+                'C6H6': 'c1ccccc1', 'C6H12': 'C1CCCCC1',
+                'C7H8': 'Cc1ccccc1', 'C7H6O2': 'O=C(O)c1ccccc1',
+                'C8H10': 'CCc1ccccc1', 'C4H10O1': 'CCCCO',
+                'C3H6O1': 'CC(C)=O', 'C2H3N1': 'CC#N',
+                'C1H4O1': 'CO',
+            };
+
+            const smiles = formulaToSMILES[formula] || formula;
+            switchTab('viewer3d');
+            setTimeout(() => loadCustomMoleculeFromFormula(smiles), 300);
+        }
+
+        function loadSMILES() {
+            const input = document.getElementById('smilesInput').value.trim();
+            if (!input) return;
+            switchTab('viewer3d');
+            setTimeout(() => loadCustomMoleculeFromFormula(input), 300);
+        }
+
+        // ============ 3D 可视化 ============
+        let viewer3d;
+        let currentStyle = 'stick';
+
+        function init3DViewer(molecule) {
+            if (viewer3d) {
+                try { viewer3d.clear(); } catch(e) {}
+                viewer3d = null;
+            }
+            
+            const element = document.getElementById('viewer3d');
+            if (!element) return;
+            element.innerHTML = '';
+            
+            viewer3d = $3Dmol.createViewer(element, {
+                backgroundColor: 'white',
+                antialias: true,
+            });
+
+            const molecules = {
+                ethanol: 'CCO',
+                benzene: 'c1ccccc1',
+                aspirin: 'CC(=O)Oc1ccccc1C(=O)O',
+                caffeine: 'CN1C=NC2=C1C(=O)N(C(=O)N2C)C',
+                glucose: 'C(C1C(C(C(C(O1)O)O)O)O)O',
+                aceticAcid: 'CC(=O)O',
+                methane: 'C',
+                ethylene: 'C=C',
+                acetylene: 'C#C',
+                toluene: 'Cc1ccccc1',
+                phenol: 'c1ccccc1O',
+                naphthalene: 'c1ccc2ccccc2c1',
+                acetone: 'CC(=O)C',
+                formaldehyde: 'C=O',
+                urea: 'NC(=O)N',
+                glycine: 'NCC(=O)O',
+                cyclohexane: 'C1CCCCC1',
+            };
+
+            const names = {
+                ethanol: '乙醇 C₂H₅OH',
+                benzene: '苯 C₆H₆',
+                aspirin: '阿司匹林',
+                caffeine: '咖啡因',
+                glucose: '葡萄糖',
+                aceticAcid: '乙酸',
+                methane: '甲烷 CH₄',
+                ethylene: '乙烯 C₂H₄',
+                acetylene: '乙炔 C₂H₂',
+                toluene: '甲苯 C₇H₈',
+                phenol: '苯酚 C₆H₅OH',
+                naphthalene: '萘 C₁₀H₈',
+                acetone: '丙酮 C₃H₆O',
+                formaldehyde: '甲醛 CH₂O',
+                urea: '尿素 CO(NH₂)₂',
+                glycine: '甘氨酸 C₂H₅NO₂',
+                cyclohexane: '环己烷 C₆H₁₂',
+            };
+
+            const smiles = molecules[molecule];
+            if (smiles) {
+                viewer3d.addModel(smiles, 'smiles');
+                viewer3d.setStyle({}, { [currentStyle]: {} });
+                viewer3d.zoomTo();
+                viewer3d.render();
+                document.getElementById('currentMolName').textContent = names[molecule] || molecule;
+            }
+        }
+
+        function loadMolecule3D(name) {
+            currentStyle = 'stick';
+            init3DViewer(name);
+        }
+
+        function setStyle3D(style) {
+            currentStyle = style;
+            if (viewer3d) {
+                viewer3d.setStyle({}, { [style]: {} });
+                viewer3d.render();
+            }
+        }
+
+        function loadCustomMolecule() {
+            const input = document.getElementById('customMolInput').value.trim();
+            if (!input) { showToast('请输入分子名称或SMILES', 'warn'); return; }
+            loadCustomMoleculeFromFormula(input);
+        }
+
+        function loadCustomMoleculeFromFormula(input) {
+            const commonSmiles = {
+                '甲烷': 'C', '乙烷': 'CC', '丙烷': 'CCC', '丁烷': 'CCCC',
+                '乙烯': 'C=C', '乙炔': 'C#C', '甲醇': 'CO', '乙醇': 'CCO',
+                '丙酮': 'CC(=O)C', '甲酸': 'C(=O)O', '乙酸': 'CC(=O)O',
+                '苯': 'c1ccccc1', '甲苯': 'Cc1ccccc1', '苯酚': 'c1ccccc1O',
+                '苯胺': 'c1ccccc1N', '萘': 'c1ccc2ccccc2c1', '环己烷': 'C1CCCCC1',
+                '氨': 'N', '水': 'O', '二氧化碳': 'O=C=O', '尿素': 'NC(=O)N',
+                '甲醛': 'C=O', '乙醛': 'CC=O', '甲醚': 'COC', '乙醚': 'CCOCC',
+                '氯仿': 'ClC(Cl)Cl', '四氯化碳': 'ClC(Cl)(Cl)Cl',
+                '丙三醇': 'OCC(O)CO', '甘油': 'OCC(O)CO',
+                '甘氨酸': 'NCC(=O)O', '丙氨酸': 'CC(N)C(=O)O',
+                '蔗糖': 'C(C1C(C(C(O1)OCC2C(C(C(O2)O)O)O)O)O)O',
+            };
+            
+            let smiles = commonSmiles[input] || input;
+            try {
+                if (viewer3d) {
+                    try { viewer3d.clear(); } catch(e) {}
+                    viewer3d = null;
+                }
+                const element = document.getElementById('viewer3d');
+                element.innerHTML = '';
+                viewer3d = $3Dmol.createViewer(element, {
+                    backgroundColor: 'white',
+                    antialias: true,
+                });
+                viewer3d.addModel(smiles, 'smiles');
+                viewer3d.setStyle({}, { [currentStyle]: {} });
+                viewer3d.zoomTo();
+                viewer3d.render();
+                document.getElementById('currentMolName').textContent = input;
+            } catch(e) {
+                showToast('无法加载该分子，请检查输入格式', 'error');
+            }
+        }
+
+        // 页面初始化时加载3D
+        setTimeout(() => {}, 500);
+
+        // ============ 同分异构体工具 ============
+        const isomerData = {
+            C4H10: {
+                name: '丁烷 C₄H₁₀',
+                isomers: [
+                    { name: '正丁烷', structure: 'CH₃-CH₂-CH₂-CH₃', bp: -0.5, mp: -138.3, density: 0.579, octane: 91.8, desc: '直链烷烃，分子间作用力较大' },
+                    { name: '异丁烷 (2-甲基丙烷)', structure: '(CH₃)₃CH', bp: -11.7, mp: -159.6, density: 0.557, octane: 97.6, desc: '支链烷烃，沸点低于正丁烷' },
+                ],
+            },
+            C5H12: {
+                name: '戊烷 C₅H₁₂',
+                isomers: [
+                    { name: '正戊烷', structure: 'CH₃-CH₂-CH₂-CH₂-CH₃', bp: 36.1, mp: -129.7, density: 0.626, octane: 61.7, desc: '直链结构，分子间接触面积最大' },
+                    { name: '异戊烷 (2-甲基丁烷)', structure: '(CH₃)₂CH-CH₂-CH₃', bp: 27.8, mp: -159.9, density: 0.620, octane: 92.3, desc: '一个支链，沸点降低' },
+                    { name: '新戊烷 (2,2-二甲基丙烷)', structure: 'C(CH₃)₄', bp: 9.5, mp: -16.6, density: 0.614, octane: 85.5, desc: '高度对称，分子间作用力最小' },
+                ],
+            },
+            C6H14: {
+                name: '己烷 C₆H₁₄',
+                isomers: [
+                    { name: '正己烷', structure: 'CH₃(CH₂)₄CH₃', bp: 68.7, mp: -95.3, density: 0.659, octane: 25.0, desc: '直链结构' },
+                    { name: '2-甲基戊烷', structure: '(CH₃)₂CH(CH₂)₂CH₃', bp: 60.3, mp: -153.7, density: 0.653, octane: 73.4, desc: '一个支链在C2位' },
+                    { name: '3-甲基戊烷', structure: 'CH₃CH₂CH(CH₃)CH₂CH₃', bp: 63.3, mp: -118.0, density: 0.664, octane: 74.5, desc: '一个支链在C3位' },
+                    { name: '2,2-二甲基丁烷', structure: '(CH₃)₃CCH₂CH₃', bp: 49.7, mp: -99.9, density: 0.649, octane: 91.8, desc: '两个支链在C2位' },
+                    { name: '2,3-二甲基丁烷', structure: '(CH₃)₂CHCH(CH₃)₂', bp: 58.0, mp: -128.5, density: 0.661, octane: 103.5, desc: '对称支链结构' },
+                ],
+            },
+            C4H8: {
+                name: '丁烯 C₄H₈',
+                isomers: [
+                    { name: '1-丁烯', structure: 'CH₂=CH-CH₂-CH₃', bp: -6.3, mp: -185.3, density: 0.595, octane: '-', desc: '双键在端位' },
+                    { name: '顺-2-丁烯', structure: 'CH₃-CH=CH-CH₃ (顺式)', bp: 3.7, mp: -138.9, density: 0.621, octane: '-', desc: '顺式异构体，极性较大' },
+                    { name: '反-2-丁烯', structure: 'CH₃-CH=CH-CH₃ (反式)', bp: 0.9, mp: -105.5, density: 0.604, octane: '-', desc: '反式异构体，更稳定' },
+                    { name: '异丁烯 (2-甲基丙烯)', structure: '(CH₃)₂C=CH₂', bp: -6.9, mp: -140.4, density: 0.594, octane: '-', desc: '支链烯烃' },
+                ],
+            },
+        };
+
+        function analyzeIsomer(formula) {
+            const data = isomerData[formula];
+            if (!data) return;
+            
+            document.getElementById('isomerTitle').textContent = `同分异构体分析 - ${data.name}`;
+            const content = document.getElementById('isomerContent');
+            const comparison = document.getElementById('isomerComparison');
+            const tbody = document.getElementById('isomerTableBody');
+            
+            let html = '<div class="grid gap-4">';
+            data.isomers.forEach((iso, i) => {
+                html += `
+                <div class="isomer-card" onclick="highlightIsomer(${i})" id="isomer-${i}">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="font-semibold text-gray-800">${iso.name}</span>
+                        <span class="text-xs text-gray-400">#${i + 1}</span>
+                    </div>
+                    <p class="text-sm text-gray-600 mb-2">${iso.structure}</p>
+                    <p class="text-xs text-gray-400">${iso.desc}</p>
+                    <div class="flex gap-3 mt-2 text-xs">
+                        <span class="text-green-600">沸点: ${iso.bp}°C</span>
+                        <span class="text-blue-600">熔点: ${iso.mp}°C</span>
+                    </div>
+                </div>`;
+            });
+            html += '</div>';
+            
+            content.innerHTML = html;
+            content.classList.remove('text-center', 'py-20');
+            comparison.classList.remove('hidden');
+            
+            // 填表格
+            tbody.innerHTML = data.isomers.map(iso => `
+                <tr class="border-t border-gray-100 hover:bg-green-50">
+                    <td class="p-3 font-medium">${iso.name}</td>
+                    <td class="p-3">${iso.bp}</td>
+                    <td class="p-3">${iso.mp}</td>
+                    <td class="p-3">${iso.density}</td>
+                    <td class="p-3">${iso.octane}</td>
+                </tr>
+            `).join('');
+        }
+
+        function highlightIsomer(index) {
+            document.querySelectorAll('.isomer-card').forEach(c => c.classList.remove('selected'));
+            const el = document.getElementById(`isomer-${index}`);
+            if (el) el.classList.add('selected');
+        }
+
+        // ============ AI 辅导 ============
+        const chemistryKB = {
+            '氧化还原': `**氧化还原反应 (Redox Reaction)**
+
+**核心概念：**
+- **氧化**：物质失去电子，化合价升高
+- **还原**：物质获得电子，化合价降低
+- **氧化剂**：获得电子的物质（被还原）
+- **还原剂**：失去电子的物质（被氧化）
+
+**记忆口诀：** "失升氧，得降还"
+
+**常见氧化剂：** KMnO₄, K₂Cr₂O₇, HNO₃, O₂, Cl₂, H₂O₂
+**常见还原剂：** Na, Mg, Al, H₂, SO₂, Fe²⁺, KI
+
+**配平方法：** 化合价升降法
+1. 标出变价元素的化合价
+2. 计算升降总数
+3. 最小公倍数配平电子
+
+**实例：**
+Zn + Cu²⁺ → Zn²⁺ + Cu
+(Zn是还原剂被氧化，Cu²⁺是氧化剂被还原)`,
+
+            '勒夏特列|化学平衡的移动': `**勒夏特列原理 (Le Chatelier's Principle)**
+
+平衡体系受到外界条件改变时，平衡向减弱这种改变的方向移动。
+
+**三大影响因素：**
+
+1. **浓度**：增加反应物浓度 → 正向移动
+2. **温度**：升温 → 向吸热方向；降温 → 向放热方向
+3. **压强**（气体反应）：增压 → 向分子数减少方向
+
+**催化剂**不改变平衡位置，只改变到达平衡的时间。
+
+**实例：**
+N₂ + 3H₂ ⇌ 2NH₃  ΔH < 0
+- 增压：正向（4→2分子）
+- 升温：逆向（放热反应）
+- 加N₂：正向`,
+
+            '化学键': `**化学键类型**
+
+**1. 离子键**
+- 电负性差 > 1.7
+- 无方向性、无饱和性
+- 例：NaCl, MgO, CaF₂
+
+**2. 共价键**
+- 电负性差 < 1.7
+- 有方向性和饱和性
+- 极性共价键：HCl, H₂O
+- 非极性共价键：H₂, Cl₂, N₂
+
+**3. 金属键**
+- 自由电子 + 金属阳离子
+- 无方向性
+- 解释导电性、延展性`,
+
+            '酸碱': `**酸碱理论**
+
+**1. Arrhenius 理论**
+酸：在水溶液中产生H⁺
+碱：在水溶液中产生OH⁻
+
+**2. Brønsted-Lowry 理论**
+酸：质子(H⁺)给予体
+碱：质子(H⁺)接受体
+
+**3. Lewis 理论**
+酸：电子对接受体
+碱：电子对给予体
+
+**pH 计算：**
+pH = -log[H⁺]
+pH < 7 酸性 | pH = 7 中性 | pH > 7 碱性`,
+
+            '元素周期': `**元素周期律**
+
+**周期表结构：**
+- 7个周期（横行）
+- 16个族（纵列）
+- 主族(IA-VIIA) + 副族(IB-VIIB) + VIII族 + 0族
+
+**周期性变化规律：**
+
+| 性质 | 同周期(左→右) | 同主族(上→下) |
+|------|-------------|-------------|
+| 原子半径 | 减小 | 增大 |
+| 电负性 | 增大 | 减小 |
+| 第一电离能 | 增大 | 减小 |
+| 金属性 | 减弱 | 增强 |
+| 非金属性 | 增强 | 减弱 |`,
+
+            '化学速率': `**化学反应速率**
+
+**影响因素：**
+1. **浓度**：浓度↑ → 速率↑
+2. **温度**：温度↑ → 速率↑（范特霍夫：每升高10°C，速率约增2-4倍）
+3. **催化剂**：降低活化能，加快速率
+4. **表面积**：固体表面积↑ → 速率↑
+
+**有效碰撞理论：**
+- 分子需有足够能量（≥活化能）
+- 分子需有正确取向
+- 有效碰撞次数越多，速率越快`,
+
+            '原电池': `**原电池 (Galvanic Cell)**
+
+将化学能转化为电能的装置。
+
+**构成条件：**
+1. 两种活泼性不同的金属（或金属与石墨）
+2. 电解质溶液
+3. 形成闭合回路
+4. 自发的氧化还原反应
+
+**工作原理（以Zn-Cu原电池为例）：**
+- 负极(Zn)：Zn - 2e⁻ → Zn²⁺（氧化）
+- 正极(Cu)：Cu²⁺ + 2e⁻ → Cu（还原）
+- 电子流向：负极 → 外电路 → 正极
+- 电流方向：正极 → 外电路 → 负极
+
+**盐桥作用：** 保持溶液电中性，构成闭合回路`,
+
+            '电解池': `**电解池 (Electrolytic Cell)**
+
+将电能转化为化学能的装置。
+
+**与原电池的区别：**
+| 项目 | 原电池 | 电解池 |
+|------|--------|--------|
+| 能量转化 | 化学能→电能 | 电能→化学能 |
+| 电极名称 | 正极、负极 | 阳极、阴极 |
+| 反应自发性 | 自发 | 非自发 |
+| 电子流向 | 负→外电路→正 | 电源负极→阴极，阳极→电源正极 |
+
+**放电顺序：**
+阳极（氧化）：活泼金属阳极 > S²⁻ > I⁻ > Br⁻ > Cl⁻ > OH⁻ > 含氧酸根
+阴极（还原）：Ag⁺ > Cu²⁺ > H⁺ > ...`,
+
+            '晶体|晶胞': `**晶体类型与结构**
+
+| 晶体类型 | 微粒 | 作用力 | 熔点 | 导电性 | 实例 |
+|---------|------|--------|------|--------|------|
+| 离子晶体 | 离子 | 离子键 | 高 | 熔融/溶液导电 | NaCl, CaO |
+| 分子晶体 | 分子 | 分子间力 | 低 | 不导电 | CO₂, I₂, H₂O |
+| 原子晶体 | 原子 | 共价键 | 很高 | 不导电 | 金刚石, SiO₂ |
+| 金属晶体 | 阳离子+电子 | 金属键 | 一般较高 | 导电 | Cu, Fe, Al |
+
+**NaCl晶胞：** 面心立方，配位数6
+**CsCl晶胞：** 简单立方，配位数8
+**金刚石：** 正四面体结构，sp³杂化`,
+
+            '有机反应类型': `**有机反应类型完整总结**
+
+| 反应类型 | 特点 | 典型反应 |
+|---------|------|---------|
+| 取代 | 原子/基团被替换 | 烷烃卤代、苯的硝化 |
+| 加成 | 不饱和键断开 | 烯烃加H₂/Br₂/H₂O |
+| 消去 | 脱小分子成不饱和键 | 醇消去成烯 |
+| 氧化 | 加氧或去氢 | 醇→醛→酸 |
+| 还原 | 加氢或去氧 | 醛/酮→醇 |
+| 酯化 | 酸+醇→酯+水 | 乙酸乙酯制备 |
+| 水解 | 与水反应分解 | 酯水解、卤代烃水解 |
+| 聚合 | 单体聚合成高分子 | 乙烯→聚乙烯 |`,
+
+            '物质的量|摩尔': `**物质的量计算**
+
+**基本公式：**
+n = m/M（质量/摩尔质量）
+n = V/Vm（气体体积/22.4 L·mol⁻¹ 标准状况）
+n = N/NA（粒子数/6.02×10²³ mol⁻¹）
+
+**浓度：** c = n/V  (mol/L)
+
+**化学计量核心：**
+化学方程式系数比 = 物质的量之比
+
+**解题步骤：**
+1. 配平化学方程式
+2. 标出已知量和未知量
+3. 列比例式求解
+4. 注意单位换算
+
+**常见陷阱：**
+- 标准状况(0°C, 101kPa)才用22.4 L/mol
+- SO₃在标准状况下为固体
+- 注意过量计算问题`,
+        };
+
+        function sendMessage() {
+            const input = document.getElementById('aiInput');
+            const msg = input.value.trim();
+            if (!msg) return;
+            
+            addMessage(msg, 'user');
+            input.value = '';
+            
+            const btn = input.nextElementSibling;
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner" style="display:inline-block"></span>';
+            
+            setTimeout(() => {
+                const response = generateResponse(msg);
+                addMessage(response, 'assistant');
+                btn.disabled = false;
+                btn.textContent = '发送';
+            }, 600 + Math.random() * 400);
+        }
+
+        function askQuick(topic) {
+            addMessage(topic, 'user');
+            setTimeout(() => {
+                const response = generateResponse(topic);
+                addMessage(response, 'assistant');
+            }, 400);
+        }
+
+        function generateResponse(query) {
+            const lower = query.toLowerCase();
+            for (const [key, answer] of Object.entries(chemistryKB)) {
+                const keywords = key.split('|');
+                for (const kw of keywords) {
+                    if (query.includes(kw)) return answer;
+                }
+            }
+
+            // 结构式分析
+            if (atoms.length > 0 && (query.includes('结构') || query.includes('分子') || query.includes('性质') || query.includes('分析'))) {
+                return analyzeCurrentStructure();
+            }
+
+            const topicResponses = {
+                '无机化学|无机': `**无机化学知识框架**
+
+**核心内容：**
+1. 元素周期表与周期律
+2. 化学键理论（离子键、共价键、金属键）
+3. 酸碱理论（Arrhenius、Brønsted-Lowry、Lewis）
+4. 氧化还原反应与电化学
+5. 配位化学基础
+6. 重要元素及其化合物
+
+**常考元素及其化合物：**
+Na：Na₂O₂（强氧化剂），NaHCO₃（小苏打）
+Al：Al₂O₃（两性），Al(OH)₃（两性氢氧化物）
+Fe：Fe²⁺/Fe³⁺转化，铁的氧化物
+Cl：Cl₂的漂白性和强氧化性
+S：SO₂的漂白性和还原性
+N：NH₃（唯一碱性气体），HNO₃的氧化性`,
+
+                '有机化学|有机': `**有机化学知识体系**
+
+**1. 烃类**
+- 烷烃（CₙH₂ₙ₊₂）：取代反应
+- 烯烃（CₙH₂ₙ）：加成、氧化、聚合
+- 炔烃（CₙH₂ₙ₋₂）：加成、聚合
+- 芳香烃：取代反应
+
+**2. 烃的衍生物**
+- 醇 → 醛 → 羧酸（氧化链）
+- 酯化反应：RCOOH + R'OH ⇌ RCOOR' + H₂O
+- 酚类：弱酸性，遇FeCl₃显紫色
+
+**3. 重要反应条件**
+- 卤代：光照或Fe催化
+- 硝化：浓HNO₃+浓H₂SO₄，50-60°C
+- 酯化：浓H₂SO₄催化+吸水，加热
+
+**4. 官能团鉴别**
+- C=C：使Br₂水/CCl₄褪色
+- -OH（醇）：加Na产生H₂
+- -COOH：使石蕊变红，与NaHCO₃产生CO₂
+- -CHO：银镜反应，与新制Cu(OH)₂产生砖红沉淀`,
+
+                '物理化学|热化学|电化学': `**物理化学核心内容**
+
+**1. 热化学**
+- 反应热 ΔH：恒压条件下的热量变化
+- ΔH < 0 放热反应 | ΔH > 0 吸热反应
+- 盖斯定律：总反应热等于各步反应热之和
+- 键能计算：ΔH = Σ反应物键能 - Σ生成物键能
+
+**2. 化学反应速率**
+- 浓度↑、温度↑ → 速率↑
+- 催化剂：降低活化能
+- 速率方程：v = k[A]ᵐ[B]ⁿ
+
+**3. 化学平衡**
+- 平衡常数 K 只与温度有关
+- 勒夏特列原理
+
+**4. 电化学**
+- 原电池：化学能→电能
+- 电解池：电能→化学能
+- 金属腐蚀与防护`,
+
+                '化学实验|实验安全': `**化学实验要点**
+
+**基本操作：**
+1. 过滤：一贴二低三靠
+2. 蒸发：不断搅拌，余热蒸干
+3. 蒸馏：温度计水银球在支管口
+4. 萃取分液：选择合适萃取剂（CCl₄、苯等）
+5. 配制一定浓度溶液：计算→称量→溶解→转移→定容
+
+**常见气体的制备与收集：**
+- O₂：2KClO₃ → 2KCl + 3O₂↑ (MnO₂催化)，排水法
+- CO₂：CaCO₃ + 2HCl → CaCl₂ + CO₂↑ + H₂O，向上排空气
+- H₂：Zn + H₂SO₄ → ZnSO₄ + H₂↑，向下排空气或排水法
+- NH₃：2NH₄Cl + Ca(OH)₂ → CaCl₂ + 2NH₃↑ + 2H₂O，向下排空气
+
+**实验安全：**
+- 稀释浓硫酸：酸入水，沿玻璃棒缓缓加入
+- 闻气体：扇闻法
+- 加热试管：先预热，管口勿对人`,
+            };
+
+            for (const [key, resp] of Object.entries(topicResponses)) {
+                const keywords = key.split('|');
+                for (const kw of keywords) {
+                    if (query.includes(kw)) return resp;
+                }
+            }
+
+            // 化学方程式解析
+            if (query.includes('+') && (query.includes('=') || query.includes('→'))) {
+                return `关于这个化学方程式的问题：
+
+我注意到你提到了化学方程式。要正确分析和配平化学方程式，请注意：
+1. 检查反应物和生成物的化学式是否正确
+2. 使用观察法或化合价升降法配平
+3. 标注反应条件（加热Δ、催化剂、光照等）
+4. 标注物质状态（s/l/g/aq）
+
+如果需要具体配平某个方程式，请描述你的具体问题。`;
+            }
+
+            return `关于「${query}」的问题：
+
+我是化学AI辅导助手，基于专业化学知识库为你服务。
+
+**我可以帮你：**
+• 📚 解释化学概念和定义
+• 🧪 分析化学反应类型和方程式
+• 📝 提供解题思路和计算方法
+• 🔬 讲解实验原理和操作要点
+• ⚛️ 分析化学结构式的性质
+• 📊 对比物质性质的差异
+
+💡 **提示：** 你可以在化学结构编辑器中绘制结构式，然后来这里让AI帮你分析其化学性质！
+
+请尝试用更具体的化学术语提问，或从左侧选择常见问题。`;
+        }
+
+        function analyzeCurrentStructure() {
+            if (atoms.length === 0) return '目前没有绘制结构式，请先在「结构式编辑」中绘制一个分子结构。';
+            
+            const counts = {};
+            atoms.forEach(a => { counts[a.element] = (counts[a.element] || 0) + 1; });
+            let formula = '';
+            ['C','H','O','N','S','P','Cl','Br'].forEach(el => {
+                if (counts[el]) formula += el + counts[el];
+            });
+
+            let bondCount = 0;
+            atoms.forEach(a => bondCount += a.bonds.length);
+            bondCount = Math.floor(bondCount / 2);
+
+            let doubleBonds = 0, tripleBonds = 0;
+            const counted = new Set();
+            atoms.forEach((a, i) => {
+                a.bonds.forEach(b => {
+                    const key = Math.min(i, b.to) + '-' + Math.max(i, b.to);
+                    if (!counted.has(key)) {
+                        counted.add(key);
+                        if (b.type === 'double') doubleBonds++;
+                        if (b.type === 'triple') tripleBonds++;
+                    }
+                });
+            });
+
+            const formulaToName = {
+                'C2H6O1': '乙醇', 'C2H4O2': '乙酸', 'C6H6': '苯', 'C6H12': '环己烷',
+            };
+
+            const isomerMatches = [];
+            for (const [key, data] of Object.entries(isomerData)) {
+                if (data.isomers.some(iso => formula === key)) {
+                    isomerMatches.push(data.name);
+                }
+            }
+
+            let analysis = `**结构式智能分析**
+
+**分子式：** ${formula}
+**原子总数：** ${atoms.length}
+**化学键总数：** ${bondCount}
+`;
+
+            if (doubleBonds > 0 || tripleBonds > 0) {
+                analysis += `**不饱和键：** `;
+                if (doubleBonds > 0) analysis += `${doubleBonds} 个双键 `;
+                if (tripleBonds > 0) analysis += `${tripleBonds} 个三键`;
+                analysis += '\n';
+            }
+
+            if (formulaToName[formula]) {
+                analysis += `\n**识别结果：** ${formulaToName[formula]}\n`;
+            }
+
+            if (formula.includes('O') && formula.includes('H')) {
+                analysis += `\n**可能含有的官能团：** `;
+                const cCount = counts['C'] || 0;
+                const oCount = counts['O'] || 0;
+                if (oCount === 1 && cCount >= 1) analysis += '羟基(-OH)';
+                if (oCount === 2 && cCount >= 2) analysis += '或 羧基(-COOH) 或 酯基(-COO-)';
+                analysis += '\n';
+            }
+
+            if (isomerMatches.length > 0) {
+                analysis += `\n**同分异构体：** 此分子式(${isomerMatches[0]}) 存在 ${isomerData[formula] ? isomerData[formula].isomers.length : '多'} 种同分异构体，可在「同分异构体」标签中查看。\n`;
+            }
+
+            analysis += `\n💡 如需更详细的性质分析，请点击左侧的快速提问或在「3D可视化」中查看其三维结构。`;
+
+            return analysis;
+        }
+
+        function addMessage(text, role) {
+            const container = document.getElementById('chatMessages');
+            const div = document.createElement('div');
+            div.className = `chat-msg ${role}`;
+            div.innerHTML = `<div class="bubble"><div style="white-space:pre-line">${text}</div></div>`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+
+        // ============ 学习辅助模块 ============
+        function switchLearnModule(module) {
+            document.querySelectorAll('.learn-module').forEach(m => m.style.display = 'none');
+            const el = document.getElementById(`learn-${module}`);
+            if (el) {
+                el.style.display = 'block';
+                if (module === 'crystal') setTimeout(() => drawCrystal('NaCl'), 100);
+                if (module === 'electrochem') setTimeout(() => drawElectrochem('galvanic'), 100);
+            }
+        }
+
+        function drawCrystal(type) {
+            const canvas = document.getElementById('crystalCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = '#f9fafb';
+            ctx.fillRect(0, 0, W, H);
+
+            const cx = W / 2, cy = H / 2;
+
+            function drawSphere(x, y, r, color) {
+                ctx.beginPath();
+                ctx.arc(x, y, r, 0, Math.PI * 2);
+                const grad = ctx.createRadialGradient(x - r * 0.3, y - r * 0.3, r * 0.1, x, y, r);
+                grad.addColorStop(0, '#ffffff');
+                grad.addColorStop(0.5, color);
+                grad.addColorStop(1, '#333');
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.strokeStyle = 'rgba(0,0,0,0.2)';
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            }
+
+            // 等轴投影
+            function proj(x, y, z) {
+                return {
+                    px: cx + (x - y) * 0.866,
+                    py: cy - z + (x + y) * 0.5
+                };
+            }
+
+            const info = document.getElementById('crystalInfo');
+
+            if (type === 'NaCl') {
+                const size = 80;
+                const points = [];
+                for (let i = 0; i <= 1; i++)
+                    for (let j = 0; j <= 1; j++)
+                        for (let k = 0; k <= 1; k++)
+                            points.push({ x: i * size, y: j * size, z: k * size, color: (i + j + k) % 2 === 0 ? '#4a90d9' : '#76c893' });
+
+                // 画边
+                ctx.strokeStyle = '#d1d5db';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                for (let a = 0; a < points.length; a++) {
+                    for (let b = a + 1; b < points.length; b++) {
+                        const dx = Math.abs(points[a].x - points[b].x) + Math.abs(points[a].y - points[b].y) + Math.abs(points[a].z - points[b].z);
+                        if (dx <= size + 1) {
+                            const p1 = proj(points[a].x, points[a].y, points[a].z);
+                            const p2 = proj(points[b].x, points[b].y, points[b].z);
+                            ctx.beginPath();
+                            ctx.moveTo(p1.px, p1.py);
+                            ctx.lineTo(p2.px, p2.py);
+                            ctx.stroke();
+                        }
+                    }
+                }
+                ctx.setLineDash([]);
+
+                // 画球
+                const sorted = [...points].sort((a, b) => b.y - a.y);
+                sorted.forEach(p => {
+                    const pos = proj(p.x, p.y, p.z);
+                    drawSphere(pos.px, pos.py, 16, p.color);
+                });
+
+                info.innerHTML = '<b>NaCl 晶胞</b> — 面心立方结构 | Na⁺ 半径: 102pm | Cl⁻ 半径: 181pm | 配位数: 6 | 熔点: 801°C';
+            } else if (type === 'CsCl') {
+                const size = 80;
+                const points = [];
+                for (let i = 0; i <= 1; i++)
+                    for (let j = 0; j <= 1; j++)
+                        for (let k = 0; k <= 1; k++)
+                            points.push({ x: i * size, y: j * size, z: k * size, color: '#4a90d9' });
+                points.push({ x: size / 2, y: size / 2, z: size / 2, color: '#76c893' });
+
+                // 边
+                ctx.strokeStyle = '#d1d5db';
+                ctx.lineWidth = 1;
+                ctx.setLineDash([4, 4]);
+                for (let a = 0; a < 8; a++) {
+                    for (let b = a + 1; b < 8; b++) {
+                        const dx = Math.abs(points[a].x - points[b].x) + Math.abs(points[a].y - points[b].y) + Math.abs(points[a].z - points[b].z);
+                        if (dx <= size + 1) {
+                            const p1 = proj(points[a].x, points[a].y, points[a].z);
+                            const p2 = proj(points[b].x, points[b].y, points[b].z);
+                            ctx.beginPath();
+                            ctx.moveTo(p1.px, p1.py);
+                            ctx.lineTo(p2.px, p2.py);
+                            ctx.stroke();
+                        }
+                    }
+                }
+                ctx.setLineDash([]);
+
+                const sorted = [...points].sort((a, b) => b.y - a.y);
+                sorted.forEach(p => {
+                    const pos = proj(p.x, p.y, p.z);
+                    const r = p.color === '#76c893' ? 12 : 16;
+                    drawSphere(pos.px, pos.py, r, p.color);
+                });
+
+                info.innerHTML = '<b>CsCl 晶胞</b> — 简单立方结构 | Cs⁺ 半径: 167pm | Cl⁻ 半径: 181pm | 配位数: 8 | 熔点: 645°C';
+            } else if (type === 'diamond') {
+                const size = 65;
+                const vertices = [
+                    [0, 0, 0], [1, 0, 1], [0, 1, 1], [1, 1, 0],
+                    [0.5, 0.5, 0.5], [0.5, 0.1, 0.9], [0.1, 0.5, 0.9], [0.1, 0.9, 0.5], [0.5, 0.9, 0.1]
+                ].map(v => ({ x: v[0] * size, y: v[1] * size, z: v[2] * size, color: '#b8b8b8' }));
+
+                const bonds = [[0, 4], [1, 4], [2, 4], [3, 4], [0, 5], [0, 6], [0, 7], [3, 7], [3, 8], [1, 5], [1, 8], [2, 6], [2, 7]];
+
+                ctx.strokeStyle = '#999';
+                ctx.lineWidth = 2.5;
+                bonds.forEach(([a, b]) => {
+                    const p1 = proj(vertices[a].x, vertices[a].y, vertices[a].z);
+                    const p2 = proj(vertices[b].x, vertices[b].y, vertices[b].z);
+                    ctx.beginPath();
+                    ctx.moveTo(p1.px, p1.py);
+                    ctx.lineTo(p2.px, p2.py);
+                    ctx.stroke();
+                });
+
+                const sorted = [...vertices].sort((a, b) => b.y - a.y);
+                sorted.forEach(v => {
+                    const pos = proj(v.x, v.y, v.z);
+                    drawSphere(pos.px, pos.py, 14, v.color);
+                });
+
+                info.innerHTML = '<b>金刚石</b> — 原子晶体 | sp³杂化 | 正四面体结构 | 配位数: 4 | 硬度最大 | 熔点: >3550°C';
+            } else if (type === 'graphite') {
+                const spacing = 55;
+                const layers = 3;
+                for (let l = 0; l < layers; l++) {
+                    const offY = l * 30;
+                    const layerColor = '#666';
+                    const points = [];
+                    for (let row = 0; row < 4; row++) {
+                        for (let col = 0; col < 4; col++) {
+                            const x = col * spacing + (row % 2) * spacing * 0.5;
+                            const y = row * spacing * 0.866;
+                            points.push({ x, y: y + offY, z: l * 25, color: '#999' });
+                        }
+                    }
+                    // 画层内键
+                    ctx.strokeStyle = layerColor;
+                    ctx.lineWidth = 2;
+                    points.forEach(p => {
+                        points.forEach(q => {
+                            const d = Math.sqrt((p.x - q.x) ** 2 + (p.y - q.y) ** 2 + (p.z - q.z) ** 2);
+                            if (d < spacing * 0.6 && d > 0.1) {
+                                const pp = { px: cx + p.x - p.y * 0.5, py: cy - p.z * 1.5 + (p.x + p.y) * 0.3 };
+                                const pq = { px: cx + q.x - q.y * 0.5, py: cy - q.z * 1.5 + (q.x + q.y) * 0.3 };
+                                ctx.beginPath();
+                                ctx.moveTo(pp.px, pp.py);
+                                ctx.lineTo(pq.px, pq.py);
+                                ctx.stroke();
+                            }
+                        });
+                    });
+                    // 画层内原子
+                    points.forEach(p => {
+                        const pp = { px: cx + p.x - p.y * 0.5, py: cy - p.z * 1.5 + (p.x + p.y) * 0.3 };
+                        drawSphere(pp.px, pp.py, 8, p.color);
+                    });
+                }
+                info.innerHTML = '<b>石墨</b> — 层状结构 | sp²杂化 | 层内共价键层间范德华力 | 导电、润滑 | 熔点: >3652°C';
+            } else if (type === 'CO2') {
+                for (let i = 0; i < 5; i++) {
+                    for (let j = 0; j < 5; j++) {
+                        const x = cx + (i - 2) * 90;
+                        const y = cy + (j - 2) * 70;
+                        drawSphere(x, y, 10, '#333');
+                        drawSphere(x - 25, y, 7, '#e53e3e');
+                        drawSphere(x + 25, y, 7, '#e53e3e');
+                        ctx.strokeStyle = '#999';
+                        ctx.lineWidth = 2;
+                        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x - 25, y); ctx.stroke();
+                        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + 25, y); ctx.stroke();
+                    }
+                }
+                info.innerHTML = '<b>CO₂ 分子晶体</b> — 干冰 | 分子间力：范德华力 | 升华温度: -78.5°C | 线型非极性分子';
+            }
+        }
+
+        function drawElectrochem(type) {
+            const canvas = document.getElementById('electroCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            const W = canvas.width, H = canvas.height;
+            ctx.clearRect(0, 0, W, H);
+            ctx.fillStyle = '#f9fafb';
+            ctx.fillRect(0, 0, W, H);
+
+            const info = document.getElementById('electroInfo');
+
+            if (type === 'galvanic') {
+                // 两个烧杯
+                const leftX = W * 0.2, rightX = W * 0.65;
+                const cupY = H * 0.25, cupH = H * 0.55, cupW = 140;
+                
+                ctx.fillStyle = 'rgba(144, 202, 249, 0.15)';
+                ctx.strokeStyle = '#64b5f6';
+                ctx.lineWidth = 2;
+                // 左杯
+                ctx.beginPath(); ctx.roundRect(leftX, cupY, cupW, cupH, 8); ctx.fill(); ctx.stroke();
+                // 右杯
+                ctx.beginPath(); ctx.roundRect(rightX, cupY, cupW, cupH, 8); ctx.fill(); ctx.stroke();
+
+                // 溶液标签
+                ctx.fillStyle = '#333';
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('ZnSO₄ 溶液', leftX + cupW / 2, cupY + cupH / 2);
+                ctx.fillText('CuSO₄ 溶液', rightX + cupW / 2, cupY + cupH / 2);
+
+                // Zn 电极
+                ctx.fillStyle = '#9e9e9e';
+                ctx.fillRect(leftX + 20, cupY - 30, 20, cupH + 45);
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.fillText('Zn', leftX + 30, cupY - 38);
+                ctx.fillText('(−)', leftX + 30, cupY + cupH + 30);
+
+                // Cu 电极
+                ctx.fillStyle = '#f4a261';
+                ctx.fillRect(rightX + cupW - 40, cupY - 30, 20, cupH + 45);
+                ctx.fillStyle = '#fff';
+                ctx.fillText('Cu', rightX + cupW - 30, cupY - 38);
+                ctx.fillText('(+)', rightX + cupW - 30, cupY + cupH + 30);
+
+                // 导线
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(leftX + 30, cupY - 30);
+                ctx.quadraticCurveTo(W / 3, cupY - 80, W / 2, cupY - 30);
+                ctx.quadraticCurveTo(W * 2 / 3, cupY + 10, rightX + cupW - 30, cupY - 30);
+                ctx.stroke();
+
+                // 盐桥
+                ctx.fillStyle = 'rgba(255, 183, 77, 0.3)';
+                ctx.beginPath();
+                ctx.moveTo(leftX + cupW + 10, cupY + cupH * 0.4);
+                ctx.quadraticCurveTo(leftX + cupW + 60, cupY - 20, rightX - 10, cupY + cupH * 0.4);
+                ctx.lineTo(rightX - 10, cupY + cupH * 0.6);
+                ctx.quadraticCurveTo(leftX + cupW + 60, cupY + 10, leftX + cupW + 10, cupY + cupH * 0.6);
+                ctx.fill();
+                ctx.fillStyle = '#333';
+                ctx.font = '11px sans-serif';
+                ctx.fillText('盐桥 (KCl)', leftX + cupW + 60, cupY - 10);
+
+                // 电流表
+                ctx.beginPath();
+                ctx.arc(W / 2, cupY - 50, 18, 0, Math.PI * 2);
+                ctx.fillStyle = 'white';
+                ctx.fill();
+                ctx.strokeStyle = '#333';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                ctx.fillStyle = '#333';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.fillText('A', W / 2, cupY - 44);
+
+                info.innerHTML = '<b>Zn-Cu 原电池</b> | 负极(Zn)：Zn - 2e⁻ → Zn²⁺ | 正极(Cu)：Cu²⁺ + 2e⁻ → Cu | 电子经导线从Zn→Cu';
+            } else if (type === 'electrolytic') {
+                const cx = W / 2, cy = H / 2;
+                
+                // 容器
+                ctx.fillStyle = 'rgba(144, 202, 249, 0.1)';
+                ctx.strokeStyle = '#64b5f6';
+                ctx.lineWidth = 2;
+                ctx.beginPath(); ctx.roundRect(cx - 120, cy - 100, 240, 200, 8); ctx.fill(); ctx.stroke();
+                
+                ctx.fillStyle = '#333';
+                ctx.font = '13px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('CuCl₂ 溶液', cx, cy);
+
+                // 电极
+                ctx.fillStyle = '#666';
+                ctx.fillRect(cx - 60, cy - 140, 12, 280);
+                ctx.fillRect(cx + 48, cy - 140, 12, 280);
+
+                // 标签
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('石墨', cx - 54, cy - 148);
+                ctx.fillText('(+) 阳极', cx - 54, cy + 160);
+                ctx.fillText('石墨', cx + 54, cy - 148);
+                ctx.fillText('(−) 阴极', cx + 54, cy + 160);
+
+                // 电源
+                ctx.fillRect(cx - 68, cy - 145, 10, 6);
+                ctx.fillRect(cx - 50, cy - 155, 10, 6);
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 1.5;
+                ctx.beginPath(); ctx.moveTo(cx - 54, cy - 155); ctx.lineTo(cx - 54, cy - 175); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(cx + 54, cy - 155); ctx.lineTo(cx + 54, cy - 175); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(cx - 54, cy - 175); ctx.lineTo(cx + 54, cy - 175); ctx.stroke();
+
+                // 气泡
+                ctx.fillStyle = 'rgba(0,200,0,0.3)';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('Cl₂↑', cx - 70, cy - 60);
+                ctx.fillText('Cu 沉积', cx + 70, cy + 20);
+
+                info.innerHTML = '<b>电解CuCl₂溶液</b> | 阳极(氧化)：2Cl⁻ - 2e⁻ → Cl₂↑ | 阴极(还原)：Cu²⁺ + 2e⁻ → Cu | 电能→化学能';
+            } else if (type === 'corrosion') {
+                const cx = W / 2, cy = H / 2;
+                
+                // 铁块
+                ctx.fillStyle = '#9e9e9e';
+                ctx.beginPath(); ctx.roundRect(cx - 70, cy - 30, 140, 60, 6); ctx.fill();
+                ctx.strokeStyle = '#666';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                ctx.fillStyle = '#fff';
+                ctx.font = 'bold 14px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillText('Fe', cx, cy + 6);
+
+                // 水滴
+                ctx.fillStyle = 'rgba(100, 180, 255, 0.3)';
+                ctx.beginPath();
+                ctx.ellipse(cx - 20, cy - 35, 30, 12, 0, 0, Math.PI * 2);
+                ctx.fill();
+
+                // 阳极区
+                ctx.fillStyle = 'rgba(255, 100, 100, 0.3)';
+                ctx.beginPath(); ctx.arc(cx - 55, cy - 15, 25, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#d32f2f';
+                ctx.font = '11px sans-serif';
+                ctx.fillText('Fe²⁺', cx - 55, cy - 18);
+                ctx.fillText('(阳极)', cx - 55, cy - 5);
+
+                // 阴极区
+                ctx.fillStyle = 'rgba(100, 200, 100, 0.3)';
+                ctx.beginPath(); ctx.arc(cx + 40, cy - 15, 25, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#2e7d32';
+                ctx.fillText('O₂ + H₂O', cx + 40, cy - 18);
+                ctx.fillText('(阴极)', cx + 40, cy - 5);
+
+                // 锈
+                ctx.fillStyle = 'rgba(255, 140, 0, 0.4)';
+                ctx.beginPath(); ctx.arc(cx - 20, cy - 12, 18, 0, Math.PI * 2); ctx.fill();
+                ctx.fillStyle = '#e65100';
+                ctx.font = '10px sans-serif';
+                ctx.fillText('Fe₂O₃·xH₂O', cx - 20, cy - 10);
+                ctx.fillText('(铁锈)', cx - 20, cy + 2);
+
+                info.innerHTML = '<b>铁的吸氧腐蚀</b> | 阳极：Fe - 2e⁻ → Fe²⁺ | 阴极：O₂ + 2H₂O + 4e⁻ → 4OH⁻ | 总：2Fe + O₂ + 2H₂O → 2Fe(OH)₂ → Fe₂O₃·xH₂O';
+            }
+        }
+
+        // ============ 初始化 ============
+        document.addEventListener('DOMContentLoaded', () => {
+            resizeCanvas();
+        });
+    </script>
+</body>
+</html>
